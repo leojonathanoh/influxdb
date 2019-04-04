@@ -29,7 +29,7 @@ func New(config control.Config) *Controller {
 }
 
 // Query satisfies the AsyncQueryService while ensuring the request is propagated on the context.
-func (c *Controller) Query(ctx context.Context, req *query.Request) (flux.Query, error) {
+func (c *Controller)  Query(ctx context.Context, req *query.Request) (flux.Query, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx)
 	defer span.Finish()
 

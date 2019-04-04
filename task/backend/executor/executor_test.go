@@ -77,7 +77,7 @@ func (s *fakeQueryService) Query(ctx context.Context, req *query.Request) (flux.
 
 	fq := &fakeQuery{
 		wait:  make(chan struct{}),
-		ready: make(chan map[string]flux.Result),
+		results: make(chan flux.Result),
 	}
 	s.queries[makeSpecString(sc.Spec)] = fq
 
@@ -139,7 +139,7 @@ func (s *fakeQueryService) WaitForQueryLive(t *testing.T, script string) {
 }
 
 type fakeQuery struct {
-	ready       chan map[string]flux.Result
+	results       chan flux.Result
 	wait        chan struct{} // Blocks Ready from returning.
 	forcedError error         // Value to return from Err() method.
 
@@ -148,11 +148,10 @@ type fakeQuery struct {
 
 var _ flux.Query = (*fakeQuery)(nil)
 
-func (q *fakeQuery) Spec() *flux.Spec                     { return nil }
 func (q *fakeQuery) Done()                                {}
-func (q *fakeQuery) Cancel()                              { close(q.ready) }
+func (q *fakeQuery) Cancel()                              { close(q.results) }
 func (q *fakeQuery) Statistics() flux.Statistics          { return flux.Statistics{} }
-func (q *fakeQuery) Ready() <-chan map[string]flux.Result { return q.ready }
+func (q *fakeQuery) Results() <-chan flux.Result { return q.results }
 
 func (q *fakeQuery) Err() error {
 	if q.ctxErr != nil {
@@ -168,7 +167,7 @@ func (q *fakeQuery) run(ctx context.Context) {
 	select {
 	case <-ctx.Done():
 		q.ctxErr = ctx.Err()
-		close(q.ready)
+		close(q.results)
 		return
 	case <-q.wait:
 		// Normal case.
@@ -176,11 +175,9 @@ func (q *fakeQuery) run(ctx context.Context) {
 
 	if q.forcedError == nil {
 		res := newFakeResult()
-		q.ready <- map[string]flux.Result{
-			res.Name(): res,
-		}
+		q.results <- res
 	} else {
-		close(q.ready)
+		close(q.results)
 	}
 }
 

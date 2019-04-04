@@ -308,27 +308,28 @@ func (p *asyncRunPromise) followQuery(wg *sync.WaitGroup) {
 		// The promise was finished somewhere else, so we don't need to call p.finish.
 		// But we do need to cancel the flux. This could be a no-op.
 		p.q.Cancel()
-	case results, ok := <-p.q.Ready():
-		if !ok {
-			// Something went wrong with the flux. Set the error in the run result.
-			rr := &runResult{err: p.q.Err()}
-			p.finish(rr, nil)
-			return
-		}
-
-		// Exhaust the results so we don't leave unfinished iterators around.
+	default:
 		var wg sync.WaitGroup
-		wg.Add(len(results))
-		for _, res := range results {
-			r := res
+		for result := range p.q.Results() {
+			wg.Add(1)
+			r := result
 			go func() {
 				defer wg.Done()
+				// Exhaust the results so we don't leave unfinished iterators around.
 				if err := exhaustResultIterators(r); err != nil {
 					p.logger.Info("Error exhausting result iterator", zap.Error(err), zap.String("name", r.Name()))
 				}
 			}()
 		}
 		wg.Wait()
+
+		if p.q.Err() != nil {
+			// Something went wrong with the flux. Set the error in the run result.
+			rr := &runResult{err: p.q.Err()}
+			p.finish(rr, nil)
+			return
+
+		}
 
 		// Otherwise, query was successful.
 		// Must call query.Done before collecting statistics. It's safe to call multiple times.
